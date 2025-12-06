@@ -33,7 +33,7 @@ class Provider(ProviderBase):
         from_attributes = True
 
 
-# Cell models
+# Cell models (now includes provider attribution)
 class CellBase(BaseModel):
     cell_id: str
     pci: Optional[int] = None
@@ -55,6 +55,7 @@ class CellBase(BaseModel):
 
 class CellCreate(CellBase):
     tower_id: int
+    provider_id: Optional[int] = None  # Which provider reported this cell
 
 
 class CellUpdate(BaseModel):
@@ -78,12 +79,18 @@ class CellUpdate(BaseModel):
 class Cell(CellBase):
     id: int
     tower_id: int
+    provider_id: Optional[int] = None  # Which provider reported this cell
 
     class Config:
         from_attributes = True
 
 
-# Tower Band models
+class CellWithProvider(Cell):
+    """Cell with full provider details"""
+    provider: Optional[Provider] = None
+
+
+# Tower Band models (now includes provider attribution)
 class TowerBandBase(BaseModel):
     band_number: int
     band_name: Optional[str] = None
@@ -94,6 +101,7 @@ class TowerBandBase(BaseModel):
 
 class TowerBandCreate(TowerBandBase):
     tower_id: int
+    provider_id: Optional[int] = None  # Which provider reported this band
 
 
 class TowerBandUpdate(BaseModel):
@@ -106,15 +114,141 @@ class TowerBandUpdate(BaseModel):
 class TowerBand(TowerBandBase):
     id: int
     tower_id: int
+    provider_id: Optional[int] = None  # Which provider reported this band
 
     class Config:
         from_attributes = True
 
 
-# Tower models
-class TowerBase(BaseModel):
+class TowerBandWithProvider(TowerBand):
+    """Tower band with full provider details"""
+    provider: Optional[Provider] = None
+
+
+# Tower-Provider junction model
+# Links towers to providers with provider-specific metadata
+class TowerProviderBase(BaseModel):
+    external_id: Optional[str] = None  # Original MongoDB _id
+    rat: Optional[str] = None  # LTE, NR, GSM, CDMA, UMTS
+    rat_subtype: Optional[str] = None
+    site_id: Optional[str] = None
+    region_id: Optional[str] = None
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    tower_mover: Optional[int] = None
+    has_bandwidth_data: bool = False
+    has_frequency_data: bool = False
+    endc_available: bool = False
+    visible: bool = True
+
+
+class TowerProviderCreate(TowerProviderBase):
+    tower_id: int
+    provider_id: int
+
+
+class TowerProviderUpdate(BaseModel):
     external_id: Optional[str] = None
-    provider_id: Optional[int] = None
+    rat: Optional[str] = None
+    rat_subtype: Optional[str] = None
+    site_id: Optional[str] = None
+    region_id: Optional[str] = None
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    tower_mover: Optional[int] = None
+    has_bandwidth_data: Optional[bool] = None
+    has_frequency_data: Optional[bool] = None
+    endc_available: Optional[bool] = None
+    visible: Optional[bool] = None
+
+
+class TowerProvider(TowerProviderBase):
+    id: int
+    tower_id: int
+    provider_id: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TowerProviderWithDetails(TowerProvider):
+    """Tower-provider link with full provider details"""
+    provider: Optional[Provider] = None
+
+
+# Tower models (now provider-agnostic, representing physical locations)
+class TowerBase(BaseModel):
+    location_hash: Optional[str] = None  # Hash of lat/lng for dedup
+    latitude: float
+    longitude: float
+    tower_type: Optional[str] = None  # MACRO, MICRO, PICO, DAS, COW, DECOMMISSIONED
+    first_seen_at: Optional[datetime] = None  # Earliest across all providers
+    last_seen_at: Optional[datetime] = None  # Latest across all providers
+    generator: Optional[str] = None
+    generator_time: Optional[int] = None
+    tower_mover_id: Optional[str] = None
+    contributors: Optional[list[int]] = None  # All contributors merged
+    has_bandwidth_data: bool = False
+    has_frequency_data: bool = False
+    endc_available: bool = False  # True if ANY provider reports EN-DC
+    provider_count: int = 1  # Number of providers at this location
+    visible: bool = True
+
+
+class TowerCreate(TowerBase):
+    pass
+
+
+class TowerUpdate(BaseModel):
+    location_hash: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    tower_type: Optional[str] = None
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    generator: Optional[str] = None
+    generator_time: Optional[int] = None
+    tower_mover_id: Optional[str] = None
+    contributors: Optional[list[int]] = None
+    has_bandwidth_data: Optional[bool] = None
+    has_frequency_data: Optional[bool] = None
+    endc_available: Optional[bool] = None
+    provider_count: Optional[int] = None
+    visible: Optional[bool] = None
+
+
+class Tower(TowerBase):
+    id: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TowerWithProviders(Tower):
+    """Tower with all its provider relationships"""
+    tower_providers: list[TowerProviderWithDetails] = []
+
+
+class TowerWithRelations(Tower):
+    """Tower with all related data: providers, cells, and bands"""
+    tower_providers: list[TowerProviderWithDetails] = []
+    cells: list[CellWithProvider] = []
+    tower_bands: list[TowerBandWithProvider] = []
+
+
+# Backward compatibility: Tower view that looks like old format
+# (for queries expecting single provider per tower)
+class TowerExpanded(BaseModel):
+    """
+    Expanded tower view - one row per tower-provider combination.
+    Mimics the old schema where each tower had a single provider.
+    """
+    tower_id: int
+    tower_provider_id: int
+    external_id: Optional[str] = None
+    provider_id: int
     rat: Optional[str] = None
     rat_subtype: Optional[str] = None
     tower_type: Optional[str] = None
@@ -133,53 +267,11 @@ class TowerBase(BaseModel):
     has_frequency_data: bool = False
     endc_available: bool = False
     contributors: Optional[list[int]] = None
-    raw_channels: Optional[dict] = None
-    raw_bandwidths: Optional[dict] = None
-    raw_band_numbers: Optional[dict] = None
-
-
-class TowerCreate(TowerBase):
-    pass
-
-
-class TowerUpdate(BaseModel):
-    external_id: Optional[str] = None
-    provider_id: Optional[int] = None
-    rat: Optional[str] = None
-    rat_subtype: Optional[str] = None
-    tower_type: Optional[str] = None
-    site_id: Optional[str] = None
-    region_id: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    visible: Optional[bool] = None
-    first_seen_at: Optional[datetime] = None
-    last_seen_at: Optional[datetime] = None
-    tower_mover: Optional[int] = None
-    tower_mover_id: Optional[str] = None
-    generator: Optional[str] = None
-    generator_time: Optional[int] = None
-    has_bandwidth_data: Optional[bool] = None
-    has_frequency_data: Optional[bool] = None
-    endc_available: Optional[bool] = None
-    contributors: Optional[list[int]] = None
-    raw_channels: Optional[dict] = None
-    raw_bandwidths: Optional[dict] = None
-    raw_band_numbers: Optional[dict] = None
-
-
-class Tower(TowerBase):
-    id: int
     created_at: Optional[datetime] = None
+    provider: Optional[Provider] = None
 
     class Config:
         from_attributes = True
-
-
-class TowerWithRelations(Tower):
-    cells: list[Cell] = []
-    tower_bands: list[TowerBand] = []
-    provider: Optional[Provider] = None
 
 
 # Geospatial query models
@@ -190,3 +282,31 @@ class TowersNearbyRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=1000)
     rat: Optional[str] = None
     tower_type: Optional[str] = None
+
+
+# Summary/stats models
+class TowerProviderSummary(BaseModel):
+    """Summary of a provider's presence at a tower"""
+    provider: Provider
+    rat: Optional[str] = None
+    cell_count: int = 0
+    band_count: int = 0
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    endc_available: bool = False
+
+
+class TowerSummary(BaseModel):
+    """Summary view of a tower with aggregated provider info"""
+    id: int
+    latitude: float
+    longitude: float
+    tower_type: Optional[str] = None
+    provider_count: int = 1
+    providers: list[TowerProviderSummary] = []
+    total_cells: int = 0
+    total_bands: int = 0
+    rats: list[str] = []  # All RAT types at this tower
+    endc_available: bool = False
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
