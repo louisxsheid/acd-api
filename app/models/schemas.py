@@ -310,3 +310,31 @@ class TowerSummary(BaseModel):
     endc_available: bool = False
     first_seen_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
+
+
+# Dashboard metrics models
+class BandDistributionEntry(BaseModel):
+    """Single entry in band distribution: how many towers have X bands"""
+    band_count: int
+    tower_count: int
+
+
+class ProviderBandDistribution(BaseModel):
+    """Band distribution for a specific provider"""
+    provider_id: int
+    provider_name: Optional[str] = None
+    distribution: list[BandDistributionEntry] = []
+    total_towers: int = 0
+    endc_towers: int = 0
+    non_endc_towers: int = 0
+
+
+class BandDistributionMetric(BaseModel):
+    """
+    Dashboard metric showing how many towers have how many bands,
+    grouped by provider and EN-DC status.
+    """
+    by_provider: list[ProviderBandDistribution] = []
+    overall: list[BandDistributionEntry] = []
+    total_towers: int = 0
+    endc_summary: dict[str, int] = {}  # {"endc_enabled": X, "endc_disabled": Y}
