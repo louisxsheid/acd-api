@@ -338,3 +338,68 @@ class BandDistributionMetric(BaseModel):
     overall: list[BandDistributionEntry] = []
     total_towers: int = 0
     endc_summary: dict[str, int] = {}  # {"endc_enabled": X, "endc_disabled": Y}
+
+
+# GNN Anomaly Detection models
+class TowerAnomalyScore(BaseModel):
+    """Anomaly score for a single tower from GNN link prediction"""
+    id: int
+    tower_id: int
+    model_version: str
+    run_id: Optional[str] = None
+    anomaly_score: float  # 0-1, higher = more anomalous
+    link_pred_error: Optional[float] = None
+    neighbor_inconsistency: Optional[float] = None
+    percentile: Optional[float] = None  # 0-100
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TowerWithAnomalyScore(BaseModel):
+    """Tower data combined with anomaly score for map display"""
+    tower_id: int
+    latitude: float
+    longitude: float
+    tower_type: Optional[str] = None
+    provider_count: int = 1
+    anomaly_score: float
+    percentile: Optional[float] = None
+    link_pred_error: Optional[float] = None
+    neighbor_inconsistency: Optional[float] = None
+
+
+class AnomalyScoreStats(BaseModel):
+    """Summary statistics for anomaly scores"""
+    total_scored: int
+    mean_score: float
+    std_score: float
+    min_score: float
+    max_score: float
+    above_95th_percentile: int
+    above_99th_percentile: int
+    model_version: str
+    run_id: Optional[str] = None
+
+
+class AnomalyScoreDistribution(BaseModel):
+    """Distribution of anomaly scores in buckets"""
+    bucket_start: float
+    bucket_end: float
+    count: int
+
+
+class AnomalyMetrics(BaseModel):
+    """Full anomaly metrics response"""
+    stats: AnomalyScoreStats
+    distribution: list[AnomalyScoreDistribution] = []
+    top_anomalies: list[TowerWithAnomalyScore] = []
+
+
+class ModelVersionInfo(BaseModel):
+    """Information about a model version/run"""
+    model_version: str
+    run_id: Optional[str] = None
+    tower_count: int = 0
+    created_at: Optional[datetime] = None

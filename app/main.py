@@ -10,6 +10,7 @@ from app.routes import (
     cells_router,
     tower_bands_router,
     metrics_router,
+    anomalies_router,
 )
 from app.services import get_hasura_client
 
@@ -46,6 +47,7 @@ app.include_router(towers_router, prefix="/api/v1")
 app.include_router(cells_router, prefix="/api/v1")
 app.include_router(tower_bands_router, prefix="/api/v1")
 app.include_router(metrics_router, prefix="/api/v1")
+app.include_router(anomalies_router, prefix="/api/v1")
 
 
 @app.get("/health")
